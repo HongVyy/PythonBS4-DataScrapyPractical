@@ -1,70 +1,76 @@
+import json
 import scrapy
-from ..items import WebscrapyItem
-from scrapy_splash import SplashRequest
 
+from ..items import Link1Data, Link2Data, Link3Data
 class webscrapy(scrapy.Spider):
     name = 'webscrapy'
     allowed_domains = ['www.scrapethissite.com']
     start_urls = ['https://www.scrapethissite.com/pages/']
 
     def parse(self, response):
-        urls = response.css("a::attr(href)").extract()
-        for url in urls:
+        all_urls = response.xpath("//a/@href").extract()
+        for url in all_urls:
             processed_url = response.urljoin(url)
             match url:
                 case "/pages/simple/":
-                    yield response.follow(processed_url, callback=self.parse_link1)
+                    yield scrapy.Request(processed_url, callback=self.parse_link1)
                 case "/pages/forms/":
-                    yield response.follow(processed_url, callback=self.parse_link2)
+                    yield scrapy.Request(processed_url, callback=self.parse_link2)
                 case "/pages/ajax-javascript/":
-                    yield response.follow(processed_url, callback=self.parse_link3)
-                case "/pages/frames/":
-                    yield response.follow(processed_url, callback=self.parse_link4)
-                case "/pages/advanced/":
-                    yield response.follow(processed_url, callback=self.parse_link5)
+                    yield scrapy.Request(processed_url, callback=self.parse_link3)
 
-    def parse_link1(self, response): 
-        for country in response.css('div.col-md-4.country'):
-            yield {
-                'Country Name': country.css('h3.country-name::text').get(default='').strip(),
-                'Country Capital': country.css('span.country-capital::text').get(default='').strip(),
-                'Country Population': country.css('span.country-population::text').get(default='').strip(),
-                'Country Area': country.css('span.country-area::text').get(default='').strip(),
-            }
-
-    def parse_link2(self, response): 
-        for team in response.css('tr.team'):
-            yield {
-                "Team Name": team.css('td.name::text').get(default='').strip(),
-                "Year": team.css('td.year::text').get(default='').strip(),
-                "Wins": team.css('td.wins::text').get(default='').strip(),
-                "Losses": team.css('td.losses::text').get(default='').strip(),
-                "OT Losses": team.css('td.ot-losses::text').get(default='').strip(),
-                "Win %": team.css('td.pct.text-success::text').get(default='').strip(),
-                "GF": team.css('td.gf::text').get(default='').strip(),
-                "GA": team.css('td.ga::text').get(default='').strip(),
-            }
-
-    def parse_link3(self, response):
-        film_year = response.css("a.year-link::text").get(default='').strip()
-        for film in response.css('div.col-md-12'):
-            yield {
-                "Film Year": film_year,
-                'Film Title': film.css('td.film-title::text').get(default='').strip(),
-                'Film Nominations': film.css('td.film-nominations::text').get(default='').strip(),
-                'Film Awards': film.css('td.film-awards::text').get(default='').strip(),
-                'Film Best Picture': film.css('td.film-best-picture::text').get(default='').strip(),
-            }
-
-    def parse_link4(self, response):
-        for turtle in response.css('div.col-md-4.turtle-family-card'):
-            item = WebscrapyItem()
-            item['image_url'] = turtle.css('img.turtle-image::attr(src)').get(default='')
-            item['turtle_family_name'] = turtle.css('h3.family-name::text').get(default='').strip()
-            item['learnmore_url'] = response.css('a.btn.btn-default.btn-xs::attr(href)').get(default='')
+    def parse_link1(self,response): 
+        item = Link1Data()
+        for country in response.xpath('//div[@class="col-md-4 country"]'):
+            item['country_name'] = country.xpath('.//h3[@class="country-name"]/text()').extract()[1].strip()
+            item['country_capital'] = country.xpath('.//span[@class="country-capital"]/text()').extract()
+            item['country_population'] = country.xpath('.//span[@class="country-population"]/text()').extract()
+            item['country_area'] = country.xpath('.//span[@class="country-area"]/text()').extract()
             yield item
 
-    def parse_link5(self, response):
-        yield {
-            'link_text': response.css('a[target="_blank"]::text()').get(default='').strip(),
+    def parse_link2(self,response): 
+        item = Link2Data()
+        for team_row in response.xpath('//tr[@class="team"]'):
+            item['team_name'] = team_row.xpath('.//td[@class="name"]/text()').get(default='').strip()
+            item['year'] = team_row.xpath('.//td[@class="year"]/text()').get(default='').strip()
+            item['wins'] = team_row.xpath('.//td[@class="wins"]/text()').get(default='').strip()
+            item['losses'] = team_row.xpath('.//td[@class="losses"]/text()').get(default='').strip()
+            item['ot_losses'] = team_row.xpath('.//td[@class="ot-losses"]/text()').get(default='').strip()
+            item['gf'] = team_row.xpath('.//td[@class="gf"]/text()').get(default='').strip()
+            item['ga'] = team_row.xpath('.//td[@class="ga"]/text()').get(default='').strip()
+            item['total'] = team_row.xpath('.//td[@class="diff text-success"]/text()').get(default='').strip()
+            yield item
+        #pagination_links = response.xpath('//ul[@class="pagination"]/li/a/@href').getall()
+        for link in response.xpath('//ul[@class="pagination"]/li/a/@href').getall():
+            page_num = link.split('=')[-1]
+            next_page_url = f'https://www.scrapethissite.com/pages/forms/?page_num={page_num}'
+            yield scrapy.Request(url=next_page_url, callback=self.parse_link2)
+
+    def parse_link3(self, response):
+        ajax_years = ['2015', '2014', '2013', '2012', '2011', '2010']
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+            'X-Requested-With': 'XMLHttpRequest',
         }
+        for year in ajax_years:
+            ajax_url = f'https://www.scrapethissite.com/pages/ajax-javascript/?ajax=true&year={year}'
+            yield scrapy.Request(url=ajax_url,method='GET',headers=headers, callback=self.parse_link3)
+
+        try:
+            data = json.loads(response.body)
+            self.logger.info(f'JSON Data: {data}')
+            for film in data:
+                item = Link3Data()
+                item['filmyear'] = film.xpath('.//a[@class="year-link"]/text()').get(default='').strip()
+                item['filmtitle'] = film.xpath('.//div[@class="film-title"]/text()').get(default='')
+                item['filmnom'] = film.xpath('.//div[@class="film-nominations"]/text()').get(default='').strip()
+                item['filmawards'] = film.xpath('.//div[@class="film-awards"]/text()').get(default='').strip()
+                item['filmbest'] = film.xpath('.//div[@class="film-best-picture"]/text()').get(default='').strip()
+                yield item
+
+            next_page = data.get('next_page')
+            if next_page:
+                yield scrapy.Request(next_page, callback=self.parse_ajaxjavascript)
+
+        except json.JSONDecodeError as e:
+            self.logger.error(f'Error decoding JSON: {e}')
