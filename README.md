@@ -2,4 +2,3 @@
 ```python
 scrapy startproject projectname
 ```
-
