@@ -13,7 +13,6 @@ class ThanhnienSpider(SitemapSpider):
         if response.status == 404:
             self.logger.error("Sitemap not found: %s", response.url)
             return
-        
         item = ThanhniennewItem()
         item['url'] = response.url
         item['description'] = response.xpath('//meta[@property="og:description"]/@content').get()
