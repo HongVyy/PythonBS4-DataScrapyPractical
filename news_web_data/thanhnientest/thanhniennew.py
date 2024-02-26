@@ -1,13 +1,11 @@
 import scrapy
 from scrapy.spiders import SitemapSpider
 from ..items import ThanhniennewItem
-
 class ThanhnienSpider(SitemapSpider):
     name = 'mynews'
     allowed_domains = ['thanhnien.vn']
     sitemap_urls = ['https://thanhnien.vn/sitemap.xml']
     sitemap_follow = ['/sitemaps/sitemaps-2024'] 
-
     handle_httpstatus_list = [404]
     def parse(self, response):
         if response.status == 404:
